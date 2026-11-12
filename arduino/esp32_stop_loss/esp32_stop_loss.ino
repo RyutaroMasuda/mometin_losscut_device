@@ -9,10 +9,10 @@ uint32_t changedAt;
 
 void setup() {
   Serial.begin(115200);
-  pinMode(STOP_PIN, INPUT_PULLUP);
+  pinMode(STOP_PIN, INPUT_PULLDOWN);
   candidateLevel = stableLevel = digitalRead(STOP_PIN);
   changedAt = millis();
-  // Booting while LOW does not count as an H -> L transition.
+  // Booting while HIGH does not count as an L -> H transition.
   Serial.println("READY");
 }
 
@@ -28,7 +28,7 @@ void loop() {
       static_cast<uint32_t>(now - changedAt) >= DEBOUNCE_MS) {
     const int previous = stableLevel;
     stableLevel = candidateLevel;
-    if (previous == HIGH && stableLevel == LOW) {
+    if (previous == LOW && stableLevel == HIGH) {
       Serial.println("STOP_LOSS");
     }
   }

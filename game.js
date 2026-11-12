@@ -4,7 +4,7 @@ const canvas=$('chart'),ctx=canvas.getContext('2d');function draw(){let rect=can
 function forceStopLoss(){
   if (!state.side || !['live', 'paused'].includes(state.phase)) return false;
   close('ESP32強制損切り');
-  $('message').textContent = 'ESP32 GPIO13のH → Lにより全ポジションを強制決済しました。';
+  $('message').textContent = 'ESP32 GPIO13のL → Hにより全ポジションを強制決済しました。';
   return true;
 }
 StopLossSerial.mount(forceStopLoss);

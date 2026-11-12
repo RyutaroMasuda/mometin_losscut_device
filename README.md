@@ -44,4 +44,4 @@ index.html をブラウザーで直接開いても遊べます。インストー
 
 ## ESP32による強制損切り
 
-GPIO13のH → LでUSB経由の強制決済に対応しています。Arduino IDE用スケッチと配線・接続方法は [ESP32_SETUP.md](ESP32_SETUP.md) を参照してください。USB連携にはPC版Chrome / Edgeが必要です。
+GPIO13のL → HでUSB経由の強制決済に対応しています。Arduino IDE用スケッチと配線・接続方法は [ESP32_SETUP.md](ESP32_SETUP.md) を参照してください。USB連携にはPC版Chrome / Edgeが必要です。

@@ -33,7 +33,7 @@
       const lines = new CommandLines(() => {
         if (session !== current || current.stopping) return;
         const closed = onStopLoss();
-        show(closed ? 'GPIO13 H → L：全ポジションを強制決済しました' : 'GPIO13 H → L：受信しました（保有ポジションなし）');
+        show(closed ? 'GPIO13 L → H：全ポジションを強制決済しました' : 'GPIO13 L → H：受信しました（保有ポジションなし）');
       });
       let failed = false;
       try {
@@ -64,7 +64,7 @@
         const port = await navigator.serial.requestPort();
         await port.open({ baudRate: 115200 });
         session = { port, reader: null, stopping: false };
-        show('ESP32接続中：GPIO13のH → Lを待っています');
+        show('ESP32接続中：GPIO13のL → Hを待っています');
         void read(session);
       } catch (error) {
         show(error.name === 'NotFoundError' ? '接続をキャンセルしました' : '接続できません。Arduinoのシリアルモニターを閉じて再接続してください。');
