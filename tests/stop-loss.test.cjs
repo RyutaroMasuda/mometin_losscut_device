@@ -18,7 +18,7 @@ test('serial commands survive fragmented CRLF and ignore boot logs or oversized 
   assert.equal(count, 3);
 });
 
-function game() {
+function game(search = '') {
   const elements = new Map();
   const context2d = new Proxy({}, { get: () => () => {} });
   function element(id) {
@@ -35,8 +35,8 @@ function game() {
   const context = vm.createContext({
     document: { getElementById: element, querySelectorAll: () => [], addEventListener() {} },
     localStorage: { getItem: () => null, setItem() {} },
-    history: { replaceState() {} }, location: { hash: '' },
-    requestAnimationFrame() {}, devicePixelRatio: 1,
+    history: { replaceState() {} }, location: { hash: '', search },
+    requestAnimationFrame() {}, devicePixelRatio: 1, URLSearchParams,
     StopLossSerial: { mount(callback) { receive = callback; } },
   });
   vm.runInContext(fs.readFileSync(path.join(__dirname, '../game.js'), 'utf8'), context);
@@ -72,4 +72,42 @@ test('idle signal is ignored, not carried into next order or next game', () => {
   g.run("fresh('next'); state.phase='live'; order(-1)");
   assert.equal(g.run('state.units'), 1000);
   assert.equal(g.run('state.count'), 0);
+});
+
+
+test('volatility scales the same seeded initial market and accepts shared settings', () => {
+  const normal = game('?vol=1');
+  const large = game('?vol=4');
+  normal.run("fresh('same-seed')");
+  large.run("fresh('same-seed')");
+  const baseMove = normal.run('state.price - 10000');
+  assert.ok(Math.abs(large.run('state.price - 10000') - baseMove * 4) < 1e-7);
+  assert.equal(game('?vol=999').run('volatility'), 1);
+});
+
+test('live volatility change preserves positions and scales future movement only', () => {
+  const g = game();
+  g.run("sound=false;state.phase='live';order(1)");
+  const price = g.run('state.price');
+  const entry = g.run('state.entry');
+  g.run('setVolatility(4)');
+  assert.equal(g.run('state.price'), price);
+  assert.equal(g.run('state.entry'), entry);
+  assert.equal(g.run('state.units'), 1000);
+  assert.equal(g.run('state.time'), 60);
+  g.run('state.rand=()=>0.75;last=1000;acc=0;frame(1100)');
+  assert.ok(Math.abs(g.run('state.price') - price - 4) < 1e-8);
+  assert.equal(g.run('state.units'), 1000);
+  assert.equal(g.receive(), true);
+});
+
+test('ready volatility change regenerates same seed and rejects invalid values', () => {
+  const g = game();
+  g.run("fresh('same-seed')");
+  const move = g.run('state.price-10000');
+  g.run('setVolatility(0.25)');
+  assert.ok(Math.abs(g.run('state.price-10000') - move * 0.25) < 1e-7);
+  assert.equal(g.run('state.seed'), 'same-seed');
+  g.run('setVolatility(0);setVolatility(NaN);setVolatility(100)');
+  assert.equal(g.run('volatility'), 0.25);
 });
