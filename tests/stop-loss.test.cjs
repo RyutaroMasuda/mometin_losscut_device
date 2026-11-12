@@ -115,7 +115,7 @@ test('ready volatility change regenerates same seed and rejects invalid values',
 
 test('loss alarm fires only after threshold crossing, re-arms on recovery, and leaves position open', () => {
   const g = game();
-  g.run("sound=false;state.phase='live';state.price=1000;order(1);sound=true;globalThis.alarmCount=0;beep=(f)=>{if(f===220)alarmCount++}");
+  g.run("sound=false;state.phase='live';state.price=1000;order(1);sound=true;globalThis.alarmCount=0;playLossAlarm=()=>{alarmCount++}");
   g.run('state.price=800;hud()');
   assert.equal(g.run('alarmCount'), 0);
   g.run('state.price=799.99;hud();hud();hud()');
@@ -131,7 +131,7 @@ test('loss alarm fires only after threshold crossing, re-arms on recovery, and l
 
 test('short loss alarm responds immediately to editable threshold while paused', () => {
   const g = game();
-  g.run("sound=false;state.phase='live';state.price=1000;order(-1);state.phase='paused';state.price=1100;sound=true;globalThis.alarmCount=0;beep=(f)=>{if(f===220)alarmCount++};hud()");
+  g.run("sound=false;state.phase='live';state.price=1000;order(-1);state.phase='paused';state.price=1100;sound=true;globalThis.alarmCount=0;playLossAlarm=()=>{alarmCount++};hud()");
   assert.equal(g.run('alarmCount'), 0);
   g.run('setLossThreshold(5)');
   assert.equal(g.run('alarmCount'), 1);
@@ -145,7 +145,7 @@ test('short loss alarm responds immediately to editable threshold while paused',
 
 test('muted alarm still shows warning, invalid thresholds are rejected, new game clears warning', () => {
   const g = game();
-  g.run("sound=false;state.phase='live';state.price=1000;order(1);globalThis.alarmCount=0;beep=(f)=>{if(f===220)alarmCount++};state.price=700;hud()");
+  g.run("sound=false;state.phase='live';state.price=1000;order(1);globalThis.alarmCount=0;playLossAlarm=()=>{alarmCount++};state.price=700;hud()");
   assert.equal(g.run('alarmCount'), 0);
   assert.match(g.element('lossWarning').textContent, /消音中/);
   g.run('setLossThreshold(0);setLossThreshold(-20);setLossThreshold(NaN);setLossThreshold(101)');
@@ -168,4 +168,40 @@ test('position return uses initial capital, scales with size, and excludes reali
   assert.equal(g.element('positionReturn').textContent, 'ポジション損益率：-4.00%');
   g.run('close();state.price=10000;order(-1);state.price=10020;hud()');
   assert.equal(g.element('positionReturn').textContent, 'ポジション損益率：-2.00%');
+});
+
+
+test('harsh alarm schedules two dissonant voices and four bursts, and stops on mute', () => {
+  const g = game();
+  g.run(`
+    globalThis.recorded = { voices: [], gains: [] };
+    const parameter = () => ({
+      setValueAtTime(value, time) { recorded.gains.push(value); },
+      linearRampToValueAtTime() {}, cancelScheduledValues() {}
+    });
+    globalThis.window = { AudioContext: class {
+      constructor() { this.currentTime = 10; this.destination = {}; }
+      resume() {}
+      createGain() { return { gain: parameter(), connect() {}, disconnect() {} }; }
+      createOscillator() {
+        const voice = { frequency: parameter(), connect() {}, disconnect() {},
+          start(time) { this.started = time; },
+          stop(time) { this.stops ||= []; this.stops.push(time); }
+        };
+        recorded.voices.push(voice);
+        return voice;
+      }
+    }};
+    playLossAlarm();
+  `);
+  assert.equal(g.run('recorded.voices.length'), 2);
+  assert.equal(g.run('recorded.voices[0].type'), 'square');
+  assert.equal(g.run('recorded.voices[1].type'), 'sawtooth');
+  assert.equal(g.run('recorded.voices.every(v => v.started === 10 && v.stops[0] === 11.5)'), true);
+  assert.equal(g.run('recorded.gains.filter(v=>v===0.025).length'), 4);
+  g.element('sound').onclick();
+  assert.equal(g.run('lossAlarm'), null);
+  assert.equal(g.run('recorded.voices.every(v=>v.stops.length===2)'), true);
+  g.run('playLossAlarm()');
+  assert.equal(g.run('recorded.voices.length'), 2);
 });
