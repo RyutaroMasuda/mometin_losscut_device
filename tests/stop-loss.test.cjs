@@ -111,3 +111,48 @@ test('ready volatility change regenerates same seed and rejects invalid values',
   g.run('setVolatility(0);setVolatility(NaN);setVolatility(100)');
   assert.equal(g.run('volatility'), 0.25);
 });
+
+
+test('loss alarm fires only after threshold crossing, re-arms on recovery, and leaves position open', () => {
+  const g = game();
+  g.run("sound=false;state.phase='live';state.price=100;order(1);sound=true;globalThis.alarmCount=0;beep=(f)=>{if(f===220)alarmCount++}");
+  g.run('state.price=80;hud()');
+  assert.equal(g.run('alarmCount'), 0);
+  g.run('state.price=79.99;hud();hud();hud()');
+  assert.equal(g.run('alarmCount'), 1);
+  assert.equal(g.run('state.units'), 1000);
+  assert.match(g.element('lossWarning').textContent, /警告/);
+  g.run('state.price=85;hud();state.price=79;hud()');
+  assert.equal(g.run('alarmCount'), 2);
+  g.receive();
+  assert.equal(g.run('state.lossWarningActive'), false);
+  assert.equal(g.element('lossWarning').textContent, '保有ポジションなし');
+});
+
+test('short loss alarm responds immediately to editable threshold while paused', () => {
+  const g = game();
+  g.run("sound=false;state.phase='live';state.price=100;order(-1);state.phase='paused';state.price=110;sound=true;globalThis.alarmCount=0;beep=(f)=>{if(f===220)alarmCount++};hud()");
+  assert.equal(g.run('alarmCount'), 0);
+  g.run('setLossThreshold(5)');
+  assert.equal(g.run('alarmCount'), 1);
+  assert.equal(g.run('state.units'), 1000);
+  assert.equal(g.run('state.phase'), 'paused');
+  g.run('setLossThreshold(5);hud()');
+  assert.equal(g.run('alarmCount'), 1);
+  g.run('setLossThreshold(15)');
+  assert.equal(g.run('state.lossWarningActive'), false);
+});
+
+test('muted alarm still shows warning, invalid thresholds are rejected, new game clears warning', () => {
+  const g = game();
+  g.run("sound=false;state.phase='live';state.price=100;order(1);globalThis.alarmCount=0;beep=(f)=>{if(f===220)alarmCount++};state.price=70;hud()");
+  assert.equal(g.run('alarmCount'), 0);
+  assert.match(g.element('lossWarning').textContent, /消音中/);
+  g.run('setLossThreshold(0);setLossThreshold(-20);setLossThreshold(NaN);setLossThreshold(101)');
+  assert.equal(g.run('lossThreshold'), 20);
+  g.run('setLossThreshold(12.34)');
+  assert.equal(g.run('lossThreshold'), 12.3);
+  g.run("fresh('reset')");
+  assert.equal(g.run('state.lossWarningActive'), false);
+  assert.equal(g.element('positionReturn').textContent, 'ポジション損益率：—');
+});
