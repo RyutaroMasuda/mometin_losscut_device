@@ -173,6 +173,21 @@ test('position return uses initial capital, scales with size, and excludes reali
 
 test('harsh alarm schedules two dissonant voices and four bursts, and stops on mute', () => {
   const g = game();
+  installAudio(g);
+  g.run('playLossAlarm()');
+  assert.equal(g.run('recorded.voices.length'), 2);
+  assert.equal(g.run('recorded.voices[0].type'), 'square');
+  assert.equal(g.run('recorded.voices[1].type'), 'sawtooth');
+  assert.equal(g.run('recorded.voices.every(v => v.started === 10 && v.stops[0] === 11.5)'), true);
+  assert.equal(g.run('recorded.gains.filter(v=>v===0.025).length'), 4);
+  g.element('sound').onclick();
+  assert.equal(g.run('lossAlarm'), null);
+  assert.equal(g.run('recorded.voices.every(v=>v.stops.length===2)'), true);
+  g.run('playLossAlarm()');
+  assert.equal(g.run('recorded.voices.length'), 2);
+});
+
+function installAudio(g) {
   g.run(`
     globalThis.recorded = { voices: [], gains: [] };
     const parameter = () => ({
@@ -192,16 +207,42 @@ test('harsh alarm schedules two dissonant voices and four bursts, and stops on m
         return voice;
       }
     }};
-    playLossAlarm();
   `);
+
+}
+
+
+test('alarm repeats after each sequence while paused and cancels when threshold recovers', () => {
+  const g = game();
+  g.run("sound=false;state.phase='live';state.price=1000;order(1);state.price=700;state.phase='paused'");
+  installAudio(g);
+  // Repeated HUD updates must not stack the active sequence.
+  g.run('sound=true;hud();hud()');
   assert.equal(g.run('recorded.voices.length'), 2);
-  assert.equal(g.run('recorded.voices[0].type'), 'square');
-  assert.equal(g.run('recorded.voices[1].type'), 'sawtooth');
-  assert.equal(g.run('recorded.voices.every(v => v.started === 10 && v.stops[0] === 11.5)'), true);
-  assert.equal(g.run('recorded.gains.filter(v=>v===0.025).length'), 4);
+  g.run('recorded.voices.slice(0,2).forEach(v=>v.onended())');
+  assert.equal(g.run('recorded.voices.length'), 4);
+  g.run('recorded.voices.slice(2,4).forEach(v=>v.onended())');
+  assert.equal(g.run('recorded.voices.length'), 6);
+  g.run('setLossThreshold(40)');
+  assert.equal(g.run('lossAlarm'), null);
+  g.run('recorded.voices.slice(4,6).forEach(v=>v.onended())');
+  assert.equal(g.run('recorded.voices.length'), 6);
+});
+
+test('muting stops the loop, unmuting restarts during loss, and close prevents restart', () => {
+  const g = game();
+  g.run("sound=false;state.phase='live';state.price=1000;order(1);state.price=700;sound=true");
+  installAudio(g);
+  g.run('hud()');
   g.element('sound').onclick();
   assert.equal(g.run('lossAlarm'), null);
-  assert.equal(g.run('recorded.voices.every(v=>v.stops.length===2)'), true);
-  g.run('playLossAlarm()');
+  g.run('recorded.voices.slice(0,2).forEach(v=>v.onended())');
   assert.equal(g.run('recorded.voices.length'), 2);
+  g.element('sound').onclick();
+  assert.equal(g.run('recorded.voices.length'), 4);
+  g.receive();
+  assert.equal(g.run('lossAlarm'), null);
+  const voiceCount = g.run('recorded.voices.length');
+  g.run('recorded.voices.slice(2,4).forEach(v=>v.onended())');
+  assert.equal(g.run('recorded.voices.length'), voiceCount);
 });
